@@ -1,0 +1,64 @@
+{
+  "RepoRoot": null,
+  "MatlabExe": null,
+  "PythonExe": null,
+  "GitExe": "git",
+  "RequireGitRepository": true,
+  "VehicleVariant": "VF9WILD",
+  "ResultsRoot": null,
+  "RunMode": "BaselineTest",
+  "BlfFiles": "all",
+  "KeepFailedScenarioMat": false,
+  "PythonModules": ["can", "cantools", "pandas", "openpyxl", "scipy", "yaml"],
+  "Paths": {
+    "ProjectFile": "01_ModelBaseDesign/EVCC_Architecture.prj",
+    "MatDir": "01_ModelBaseDesign/04_SWE5_SoftwareIntegration/simulation_resource/mat",
+    "SchemaDir": "01_ModelBaseDesign/04_SWE5_SoftwareIntegration/simulation_resource",
+    "BlfRoot": "01_ModelBaseDesign/04_SWE5_SoftwareIntegration/simulation_resource/blf",
+    "BaselineRoot": "01_ModelBaseDesign/04_SWE5_SoftwareIntegration/Baseline",
+    "PythonTool": "01_ModelBaseDesign/06_Tools/TestAction/blf2mat/blf_to_signal_editor_cli.py",
+    "InterfaceDir": "01_ModelBaseDesign/01_SWE2_SoftwareArchitecture/Interface",
+    "DbcDir": "01_ModelBaseDesign/Common/dbc",
+    "MappingConfig": "01_ModelBaseDesign/06_Tools/TestAction/blf2mat/signal_mapping.yaml"
+  },
+  "SchemaFiles": ["BSW_IN.txt", "BSW_OUT.txt"],
+  "Variants": {
+    "VF68NP": {"ExcelPrefix": "interface_APSW_Model_VF68NP_"},
+    "VF9WILD": {"ExcelPrefix": "interface_APSW_Model_VF9_WILD_"}
+  },
+  "Matlab": {
+    "ModelName": "EVCC_Intergration",
+    "MergedScenarioFile": "EVCC_Intergration_Scenarios.mat",
+    "ExportSchemaFunction": "listBSW_io",
+    "MergeFunction": "merge_mat_scenarios",
+    "SetVariantFunction": "set_wdmode_variant",
+    "RunScenariosFunction": "run_all_scenarios",
+    "CompareFunction": "compare_baseline",
+    "TimeTolerance": 0.5,
+    "LegacyBaselines": [
+      {"Scenario": "AC-Basic_Charging", "File": "AC-Basic_baseline.mat"},
+      {"Scenario": "AC-HLC_Charging", "File": "AC-HLC_baseline.mat"},
+      {"Scenario": "DC-HLC_Charging", "File": "DC-HLC_baseline.mat"},
+      {"Scenario": "V2L-Discharging", "File": "V2L_Discharging_baseline.mat"}
+    ]
+  },
+  "Debug": {
+    "Enabled": false,
+    "MatlabVariables": ["variant", "runMode", "repoRoot", "matDir", "baselineDir", "modelName", "stem", "fault", "totalFault"],
+    "MaxValueElements": 20,
+    "PrintMatlabProducts": true
+  },
+  "Schedule": {
+    "TaskName": "EVCC Baseline Nightly",
+    "At": "22:00",
+    "LogonType": "Password",
+    "TimeoutHours": 4,
+    "WakeToRun": true,
+    "StartWhenAvailable": true,
+    "AllowStartIfOnBatteries": true,
+    "DontStopIfGoingOnBatteries": true,
+    "MultipleInstances": "IgnoreNew",
+    "UserId": "",
+    "RunLevel": "Limited"
+  }
+}
