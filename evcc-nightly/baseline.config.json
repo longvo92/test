@@ -1,0 +1,8 @@
+{
+  "RepoRoot": "C:\\Workspace\\vin_evcc_asw_nightly",
+  "MatlabExe": "C:\\Program Files\\MATLAB\\R2024b\\bin\\matlab.exe",
+  "PythonExe": "C:\\Workspace\\venvs\\evcc\\Scripts\\python.exe",
+  "VehicleVariant": "VF9WILD",
+  "ResultsRoot": "C:\\Workspace\\EVCCNightlyResults",
+  "KeepFailedScenarioMat": false
+}
