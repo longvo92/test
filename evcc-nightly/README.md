@@ -1,50 +1,75 @@
-# EVCC nightly baseline trial
+# EVCC nightly baseline
 
-Local Windows PowerShell 5.1 runner adapted from `Pasted text(7).txt` in the ChatGPT conversation **Đánh giá rủi ro pipeline**. The Azure pipeline itself is unchanged. No scheduler task is installed until you run the installer.
+Windows PowerShell 5.1 runner extracted from the supplied EVCC Azure baseline YAML. Uses the existing project and converter; does not fetch, reset/clean, commit or push source. A schedule always runs `BaselineTest` against the current checkout.
 
 ## Configure and run
 
-1. Keep this folder in a permanent location. Edit `baseline.config.json`: set an existing **dedicated test checkout**, absolute MATLAB/Python executable paths, variant (`VF68NP`, `VF9WILD`, `All`) and a results directory outside the checkout. Python needs `python-can`, `cantools`, `pandas`, `openpyxl`, `scipy`, `PyYAML`, plus any dependencies required by the converter itself. The sample paths must be replaced if they differ on your PC.
-2. Run `Run-Now.cmd -CheckOnly` for basic file paths, Python imports and checkout-lock checks. It does not launch MATLAB or prove simulation/license availability. Then run `Run-Now.cmd` once to verify a complete regression with your project and MATLAB license.
-3. From PowerShell in this folder, install the nightly task:
+Edit **`baseline.config.json`**. It contains the machine paths, execution mode/BLF selection, project/tool paths, variants and Excel prefixes, MATLAB helper names/model/tolerance/legacy baselines, debug settings, and nightly schedule. Relative repository/results/executable paths use the JSON file's directory; relative `Paths` entries use `RepoRoot`. Executables may also be names on PATH (absolute paths are more predictable in Task Scheduler).
+
+`config.defaults.json` supplies compatibility defaults for older six-property config files. Only edit your `baseline.config.json`; partial nested overrides inherit defaults, arrays and the `Variants` map replace defaults. `All` processes the configured variants in JSON order.
+
+Set `RepoRoot`, `MatlabExe`, `PythonExe`, `ResultsRoot` and `VehicleVariant` for your PC. The sample MATLAB path is **R2024b**; point it at the version actually installed. Use a dedicated test checkout; Python needs the modules listed in `PythonModules` and any additional converter dependencies. Set `RequireGitRepository` to `false` only for a source export without `.git` (no Git SHA/status is recorded). MATLAB needs its existing project/toolbox/license setup.
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Install-NightlyTask.ps1 -At 22:00
+# Preflight: no MATLAB launch and no simulation MAT cleanup.
+.\Run-Now.cmd -CheckOnly -DebugMode
+
+# Run with diagnostic logging.
+.\Run-Now.cmd -DebugMode
 ```
 
-The default installer asks for your current Windows account **password**, not a Windows Hello PIN, so the task can run while logged off. Task Scheduler manages the credential; it is not saved in these files. If registration is denied by Windows policy, run the installer in an elevated PowerShell under the same account or ask your IT administrator about batch-logon rights. MATLAB, its toolboxes/license and Python must work under that account without interactive prompts.
+Without CLI overrides, `RunMode`, `BlfFiles` and `Debug.Enabled` come from JSON. Existing `-RunMode`, `-BlfFiles`, `-At`, `-TaskName` and `-Interactive` options remain supported. Double-clicking `Run-Now.cmd` pauses on failure so the error stays visible; calls with arguments and scheduled runs do not pause.
 
-For an account without a usable password, use `-Interactive`: this can run with the screen locked, but the account must remain logged in. To inspect the proposed schedule without registering it or asking for a password, use `-Preview`. Use `-Replace` to update an existing task of the same name.
+## Debugging a failed start
 
-The schedule uses Windows local time, requests wake from sleep, runs missed starts when available, ignores overlapping scheduled starts and has a four-hour execution limit, matching the YAML. A powered-off computer cannot wake this way. Windows power/firmware policy must allow wake timers. Runs are allowed on battery. The checkout lock also prevents two copies of this runner using the same checkout; it does not coordinate with the Azure agent or manually launched MATLAB. Do not share the nightly checkout with either.
+Set `Debug.Enabled` to `true`, or pass `-DebugMode`. The runner prints the config file, results folder, resolved paths, selected Excel/BLFs, allowlisted EVCC variables, commands, elapsed time and process exit codes. Debug output records PowerShell version, account and initial directory; Git status covers tracked changes when Git is required. It does not dump the entire process environment.
+
+MATLAB prints its version, helper resolution (`which`) and the names in **`Debug.MatlabVariables`** at major phases. Add project variable names there, for example `fault`, `totalFault` or a calibration variable. Names must be simple identifiers, not expressions. Missing variables are reported as unavailable. Numeric/logical/text values up to `MaxValueElements` are displayed; larger values and other types show class/size. No debug workspace MAT dump is created. `PrintMatlabProducts` controls the installed-product listing during schema export.
+
+Each run has a unique folder under `ResultsRoot`:
+
+| File | Contents |
+| --- | --- |
+| `run.log` | Transcript, tools' stdout/stderr, MATLAB phase/errors |
+| `result.json` | Exit code, current phase, finish time and error details |
+| `error.json` | On error: message, PowerShell source position and stack |
+| `debug.json` | With debug enabled: host/account/start-directory diagnostics |
+| `effective-config.json` | Resolved settings for debug/preflight, and all full runs |
+| `scenarios.json` | Aggregate counts after a completed workflow |
+
+Logging starts before dependency/path checks. If JSON cannot be read/parsed or `ResultsRoot` is unwritable, diagnostics go under `%TEMP%\EVCCNightly-startup-<id>`; the path is printed. To diagnose a failure, inspect `error.json` and the last section of `run.log` in the printed `[RESULTS]` folder. Debug does not repair a missing tool, license or project dependency.
+
+Preflight checks config types, tools, Python imports, checkout locking, required paths, numeric Excel version selection, BLF files and baseline references (including legacy names). It does not prove MATLAB/license/model execution. Native stderr is logged; a nonzero process exit determines failure.
+
+## Nightly schedule
+
+Set `Schedule.At` (default `22:00`, Windows local time), task name, timeout, logon type, wake/power settings and overlap policy in JSON. Inspect the proposed task first, without task-service calls or registration:
 
 ```powershell
-# Trigger the installed task now, then inspect its last result.
-Start-ScheduledTask -TaskName 'EVCC Baseline Nightly'
-Get-ScheduledTaskInfo -TaskName 'EVCC Baseline Nightly'
-
-# Remove the schedule only; checkout and results are retained.
-Unregister-ScheduledTask -TaskName 'EVCC Baseline Nightly' -Confirm:$false
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Install-NightlyTask.ps1 -Preview
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Install-NightlyTask.ps1
 ```
 
-## Behavior and results
+The installer preflights `BaselineTest` before registration. `Schedule.LogonType: "Password"` asks for the Windows account password (not the Hello PIN) to run while logged off. Credentials are passed to Windows Task Scheduler, never written into JSON/logs. `Interactive` works while locked but requires the configured account to stay logged in. Empty `UserId` means the current account; another account must have access to the tools, source, results and license. If Windows denies registration/batch logon, use the appropriate elevated account or ask IT.
 
-The runner uses the checkout's **current revision**. It does not fetch updates, switch branches, reset/clean Git, commit or push. Update this dedicated checkout yourself before a run if you want to test newer source. Git SHA is recorded in the log; uncommitted changes are also used, so the SHA alone does not fully identify a modified workspace. The existing MATLAB tools may modify model/variant files as in the original pipeline.
+Use `-Replace` to update an installed task after changing schedule settings. Execution/debug settings are read from JSON on each run. Scheduled execution explicitly selects `BaselineTest` even if manual `RunMode` is `GenerateBaseline`. Default settings request wake from sleep, run missed starts when available, allow battery operation, ignore overlapping starts and impose a four-hour limit. A powered-off PC cannot wake this way; Windows/firmware wake timers must be enabled. A forced timeout can leave incomplete logs/no final JSON and may leave child processes; inspect Task Scheduler history and MATLAB processes before retrying.
 
-Execution preserves the original sequence and interfaces: `listBSW_io`, highest numeric version of the variant-specific interface Excel, BLF converter, `merge_mat_scenarios`, `set_wdmode_variant`, `run_all_scenarios`, and `compare_baseline(..., 'TimeTolerance', 0.5)`. Variants run sequentially in separate MATLAB processes. Existing legacy baseline filename fallbacks are preserved. Only `GenerateBaseline` accepts a BLF subset, as in the YAML.
+Exit codes / Task Scheduler `LastTaskResult`: **0** pass (or successful preflight), **1** baseline mismatch, **2** config/execution error. The checkout lock coordinates copies of this runner, not the Azure agent or manual MATLAB sessions. Do not share the dedicated checkout with them.
 
-The shared simulation `mat` directory is working data: each variant removes previous `*_input.mat`, `*_output.mat` and `EVCC_Intergration_Scenarios.mat`. Use a dedicated checkout and keep valuable MAT files elsewhere. Baseline reference files are never replaced by this wrapper.
+## Working data and baseline generation
 
-Each invocation that reaches log setup gets a unique directory under `ResultsRoot`, with `run.log`, `result.json`, and on a completed workflow `scenarios.json` plus per-variant status files. MATLAB execution errors include their phase in the log. Exit codes / Task Scheduler `LastTaskResult`: `0` = pass (or successful `-CheckOnly`), `1` = baseline mismatch, `2` = setup/execution error. This makes mismatches visible as a nonzero result locally; the original Azure pipeline reports them as a warning. A forced scheduler timeout may leave an incomplete log and no final result JSON; check Task Scheduler history too.
+The original MATLAB sequence and tolerance default (`0.5`) are preserved. Configurable helper names must be MATLAB identifiers; schema/merge helpers can be scripts and run in the same script workspace. The Python converter's own `signal_mapping.yaml` stays in its original format; `Paths.MappingConfig` selects it. If project helpers assume fixed MAT locations, keep `Paths.MatDir` consistent with those helpers.
 
-`KeepFailedScenarioMat` defaults to `false` to avoid copying multi-GB MAT files every night. Logs still list failed scenarios; simulation MATs remain in the shared working folder until the next variant/run cleans them. Set it to `true` to retain failed output MATs under `FailedScenarioMAT/<variant>` for each run. Logs/results have **no automatic retention/deletion**; monitor disk space and remove old run folders yourself.
+Before each variant, previous `*_input.mat`, `*_output.mat` and the configured merged scenario file are removed from the shared MAT work directory. Keep valuable MAT files elsewhere. The wrapper never replaces baseline references. `KeepFailedScenarioMat: false` avoids copying multi-GB failure outputs every night; set it to `true` to retain them under `FailedScenarioMAT/<variant>`. Otherwise working outputs survive only until the next variant/run cleans them. There is no automatic results retention/deletion.
 
-Manual baseline generation is available, but is never selected by the scheduled task:
+For manual generation set JSON `RunMode`/`BlfFiles`, or use:
 
 ```powershell
 .\Run-Now.cmd -RunMode GenerateBaseline -BlfFiles 'AC-Basic_Charging.blf'
 ```
 
-Generated references go into the run's `GeneratedBaseline/<variant>` folder for manual review/copy, not over the existing baseline.
+Only generation selects a BLF subset, as in the YAML. Generated references go under `GeneratedBaseline/<variant>` for review, not over existing references.
 
-This is a trial extracted from the supplied YAML. Local wrapper checks do not verify the proprietary MATLAB tools, BLF conversion semantics, model behavior, license availability or unattended execution on your PC. A full manual run followed by one scheduled run is required there.
+## Verification
+
+Run `powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tests\Smoke.ps1` for synthetic wrapper tests, including old configs, JSON overrides, debug/errors, native stderr and exit codes. Tests create fixtures in TEMP and preview the scheduler without registering a task. They do not verify proprietary converter/model behavior. MATLAB Code Analyzer can check `export_schema.m` and `run_variant.m` separately; a complete manual regression and one real scheduled run must still be verified on the target PC.
